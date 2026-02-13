@@ -1258,6 +1258,11 @@ const ChatApp: React.FC = () => {
         }
       }
 
+      // TS Safety Check: Ensure stream exists before iteration
+      if (!responseStream) {
+        throw new Error("Failed to establish connection to the model.");
+      }
+
       let sources: Source[] = [];
 
       for await (const chunk of responseStream) {
