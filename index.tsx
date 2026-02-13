@@ -1226,11 +1226,37 @@ const ChatApp: React.FC = () => {
         requestConfig.thinkingConfig = { thinkingBudget: 2048 };
       }
 
-      const responseStream = await ai.models.generateContentStream({
-        model: MODEL_NAME,
-        contents: [...historyContents, { role: 'user', parts: currentParts }],
-        config: requestConfig
-      });
+      // RETRY LOGIC for Rate Limits (429)
+      const makeRequest = async () => {
+         return await ai.models.generateContentStream({
+            model: MODEL_NAME,
+            contents: [...historyContents, { role: 'user', parts: currentParts }],
+            config: requestConfig
+          });
+      };
+
+      let responseStream;
+      let attempt = 0;
+      const maxRetries = 3;
+      
+      while (attempt <= maxRetries) {
+        try {
+          responseStream = await makeRequest();
+          break; // Success
+        } catch (e: any) {
+          const msg = e.message || e.toString();
+          // Check for Rate Limit (429), Forbidden (403), or Server Error (503)
+          if ((msg.includes('429') || msg.includes('Too Many Requests') || msg.includes('403') || msg.includes('503')) && attempt < maxRetries) {
+             attempt++;
+             // Exponential backoff: 1s, 2s, 4s
+             const waitTime = Math.pow(2, attempt - 1) * 1000; 
+             console.warn(`BorAI: Rate limit hit. Retrying in ${waitTime}ms...`);
+             await new Promise(r => setTimeout(r, waitTime));
+             continue;
+          }
+          throw e; // Fatal error or max retries reached
+        }
+      }
 
       let sources: Source[] = [];
 
